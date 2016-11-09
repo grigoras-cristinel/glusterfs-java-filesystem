@@ -11,7 +11,13 @@
    <properties>
       <powermock.version>1.5.2</powermock.version>
    </properties>
-
+   <distributionManagement>
+      <repository>
+         <id>csean</id>
+         <name>Nexus Comtec</name>
+         <url>http://nexus.comtec.lan/content/repositories/Csean</url>
+      </repository>
+   </distributionManagement>
    <build>
       <plugins>
          <plugin>

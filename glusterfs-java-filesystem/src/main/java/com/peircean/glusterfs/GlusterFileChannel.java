@@ -1,24 +1,35 @@
 package com.peircean.glusterfs;
 
-import com.peircean.libgfapi_jni.internal.GLFS;
-import com.peircean.libgfapi_jni.internal.GlusterOpenOption;
-import com.peircean.libgfapi_jni.internal.UtilJNI;
-import com.peircean.libgfapi_jni.internal.structs.stat;
-import lombok.AccessLevel;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
-import java.nio.channels.*;
+import java.nio.channels.ClosedChannelException;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
+import java.nio.channels.NonReadableChannelException;
+import java.nio.channels.NonWritableChannelException;
+import java.nio.channels.ReadableByteChannel;
+import java.nio.channels.WritableByteChannel;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.PosixFilePermission;
-import java.util.*;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+
+import com.peircean.libgfapi_jni.internal.GLFS;
+import com.peircean.libgfapi_jni.internal.GlusterOpenOption;
+import com.peircean.libgfapi_jni.internal.UtilJNI;
+import com.peircean.libgfapi_jni.internal.structs.stat;
+
+import lombok.AccessLevel;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
  * @author <a href="http://about.me/louiszuckerman">Louis Zuckerman</a>
@@ -26,8 +37,8 @@ import java.util.*;
 @Data
 @NoArgsConstructor(access = AccessLevel.PACKAGE)
 public class GlusterFileChannel extends FileChannel {
-	public static final Map<StandardOpenOption, Integer> optionMap = new HashMap<StandardOpenOption, Integer>();
-	public static final Map<PosixFilePermission, Integer> perms = new HashMap<PosixFilePermission, Integer>();
+	public static final Map<StandardOpenOption, Integer> optionMap = new HashMap<>();
+	public static final Map<PosixFilePermission, Integer> perms = new HashMap<>();
 
 	static {
 		optionMap.put(StandardOpenOption.APPEND, GlusterOpenOption.O_APPEND);
@@ -57,7 +68,8 @@ public class GlusterFileChannel extends FileChannel {
 	private long position;
 	private boolean closed = false;
 
-	void init(GlusterFileSystem fileSystem, Path path, Set<? extends OpenOption> options, FileAttribute<?>... attrs) throws IOException {
+	void init(GlusterFileSystem fileSystem, Path path, Set<? extends OpenOption> options, FileAttribute<?>... attrs)
+			throws IOException {
 		this.fileSystem = fileSystem;
 		if (!path.isAbsolute()) {
 			throw new IllegalStateException("Only absolute paths are supported at this time");
@@ -83,7 +95,8 @@ public class GlusterFileChannel extends FileChannel {
 		}
 
 		if (0 >= fileptr) {
-			throw new IOException("Unable to create or open file '" + pathString + "' on volume '" + fileSystem.toString() + "'");
+			throw new IOException(
+					"Unable to create or open file '" + pathString + "' on volume '" + fileSystem.toString() + "'");
 		}
 	}
 
@@ -107,7 +120,7 @@ public class GlusterFileChannel extends FileChannel {
 			throw new IOException(UtilJNI.strerror());
 		}
 		position += read;
-		byteBuffer.position((int)read);
+		byteBuffer.position((int) read);
 		return (int) read;
 	}
 
@@ -162,50 +175,54 @@ public class GlusterFileChannel extends FileChannel {
 		return totalRead;
 	}
 
-    @Override
-    public int write(ByteBuffer byteBuffer) throws IOException {
-        guardClosed();
-        byte[] buf = byteBuffer.array();
-        int written = GLFS.glfs_write(fileptr, buf, buf.length, 0);
-        if (written < 0) {
-            throw new IOException(UtilJNI.strerror());
-        }
-        position += written;
-        byteBuffer.position(written);
-        return written;
-    }
+	@Override
+	public int write(ByteBuffer byteBuffer) throws IOException {
+		guardClosed();
+		if (byteBuffer.hasArray()) {
+			byte[] buf = byteBuffer.array();
+			int written = GLFS.glfs_write(fileptr, buf, byteBuffer.remaining(), 0);
+			if (written < 0) {
+				throw new IOException(UtilJNI.strerror());
+			}
+			position += written;
+			byteBuffer.position(written);
+			return written;
+		} else {
+			throw new IOException(UtilJNI.strerror());
+		}
+	}
 
-    @Override
-    public long write(ByteBuffer[] byteBuffers, int offset, int length) throws IOException {
-        guardClosed();
-        if (offset < 0 || offset > byteBuffers.length) {
-            throw new IndexOutOfBoundsException("Offset provided is invalid.");
-        }
-        if (length < 0 || length > byteBuffers.length - offset) {
-            throw new IndexOutOfBoundsException("Length provided is invalid");
-        }
-        if (!options.contains(StandardOpenOption.WRITE)) {
-            throw new NonWritableChannelException();
-        }
+	@Override
+	public long write(ByteBuffer[] byteBuffers, int offset, int length) throws IOException {
+		guardClosed();
+		if (offset < 0 || offset > byteBuffers.length) {
+			throw new IndexOutOfBoundsException("Offset provided is invalid.");
+		}
+		if (length < 0 || length > byteBuffers.length - offset) {
+			throw new IndexOutOfBoundsException("Length provided is invalid");
+		}
+		if (!options.contains(StandardOpenOption.WRITE)) {
+			throw new NonWritableChannelException();
+		}
 
-        long totalWritten = 0L;
+		long totalWritten = 0L;
 
-        for (int i = offset; i < length + offset; i++) {
-            int remaining = byteBuffers[i].remaining();
-            while (remaining > 0) {
-                byte[] bytes = byteBuffers[i].array();
-                int written = GLFS.glfs_write(fileptr, bytes, remaining, 0);
-                if (written < 0) {
-                    throw new IOException();
-                }
-                position += written;
-                byteBuffers[i].position(written);
-                totalWritten += written;
-                remaining = byteBuffers[i].remaining();
-            }
-        }
-        return totalWritten;
-    }
+		for (int i = offset; i < length + offset; i++) {
+			int remaining = byteBuffers[i].remaining();
+			while (remaining > 0) {
+				byte[] bytes = byteBuffers[i].array();
+				int written = GLFS.glfs_write(fileptr, bytes, remaining, 0);
+				if (written < 0) {
+					throw new IOException();
+				}
+				position += written;
+				byteBuffers[i].position(written);
+				totalWritten += written;
+				remaining = byteBuffers[i].remaining();
+			}
+		}
+		return totalWritten;
+	}
 
 	@Override
 	public long position() throws IOException {
@@ -219,7 +236,7 @@ public class GlusterFileChannel extends FileChannel {
 		if (offset < 0) {
 			throw new IllegalArgumentException("offset can't be negative");
 		}
-		int whence = 0; //SEEK_SET
+		int whence = 0; // SEEK_SET
 		int seek = GLFS.glfs_lseek(fileptr, offset, whence);
 		position = offset;
 		return this;
@@ -243,7 +260,8 @@ public class GlusterFileChannel extends FileChannel {
 
 	@Override
 	public FileChannel truncate(long l) throws IOException {
-		return null;  //To change body of implemented methods use File | Settings | File Templates.
+		return null; // To change body of implemented methods use File |
+						// Settings | File Templates.
 	}
 
 	@Override
@@ -257,12 +275,14 @@ public class GlusterFileChannel extends FileChannel {
 
 	@Override
 	public long transferTo(long l, long l2, WritableByteChannel writableByteChannel) throws IOException {
-		return 0;  //To change body of implemented methods use File | Settings | File Templates.
+		return 0; // To change body of implemented methods use File | Settings |
+					// File Templates.
 	}
 
 	@Override
 	public long transferFrom(ReadableByteChannel readableByteChannel, long l, long l2) throws IOException {
-		return 0;  //To change body of implemented methods use File | Settings | File Templates.
+		return 0; // To change body of implemented methods use File | Settings |
+					// File Templates.
 	}
 
 	@Override
@@ -277,7 +297,7 @@ public class GlusterFileChannel extends FileChannel {
 		if (position >= size()) {
 			return -1;
 		}
-		int whence = 0; //SEEK_SET
+		int whence = 0; // SEEK_SET
 		int seek = GLFS.glfs_lseek(fileptr, position, whence);
 		if (seek < 0) {
 			throw new IOException();
@@ -298,47 +318,50 @@ public class GlusterFileChannel extends FileChannel {
 		return (int) read;
 	}
 
-    @Override
-    public int write(ByteBuffer byteBuffer, long position) throws IOException {
-        guardClosed();
-        if (position < 0) {
-            throw new IllegalArgumentException();
-        }
-        if (!options.contains(StandardOpenOption.WRITE)) {
-            throw new NonWritableChannelException();
-        }
-        if (position >= size()) {
-            byte[] bytes = byteBuffer.array();
-            byte[] temp = Arrays.copyOf(bytes, bytes.length + (int) (position - size()));
-            byteBuffer = ByteBuffer.wrap(temp);
-        }
-        int whence = 0; //SEEK_SET
-        int seek = GLFS.glfs_lseek(fileptr, position, whence);
-        if (seek < 0) {
-            throw new IOException();
-        }
-        byte[] bytes = byteBuffer.array();
-        long written = GLFS.glfs_write(fileptr, bytes, bytes.length, 0);
-        seek = GLFS.glfs_lseek(fileptr, this.position, whence);
-        if (seek < 0) {
-            throw new IOException();
-        }
-        return (int) written;
-    }
+	@Override
+	public int write(ByteBuffer byteBuffer, long position) throws IOException {
+		guardClosed();
+		if (position < 0) {
+			throw new IllegalArgumentException();
+		}
+		if (!options.contains(StandardOpenOption.WRITE)) {
+			throw new NonWritableChannelException();
+		}
+		if (position >= size()) {
+			byte[] bytes = byteBuffer.array();
+			byte[] temp = Arrays.copyOf(bytes, bytes.length + (int) (position - size()));
+			byteBuffer = ByteBuffer.wrap(temp);
+		}
+		int whence = 0; // SEEK_SET
+		int seek = GLFS.glfs_lseek(fileptr, position, whence);
+		if (seek < 0) {
+			throw new IOException();
+		}
+		byte[] bytes = byteBuffer.array();
+		long written = GLFS.glfs_write(fileptr, bytes, bytes.length, 0);
+		seek = GLFS.glfs_lseek(fileptr, this.position, whence);
+		if (seek < 0) {
+			throw new IOException();
+		}
+		return (int) written;
+	}
 
 	@Override
 	public MappedByteBuffer map(MapMode mapMode, long l, long l2) throws IOException {
-		return null;  //To change body of implemented methods use File | Settings | File Templates.
+		return null; // To change body of implemented methods use File |
+						// Settings | File Templates.
 	}
 
 	@Override
 	public FileLock lock(long l, long l2, boolean b) throws IOException {
-		return null;  //To change body of implemented methods use File | Settings | File Templates.
+		return null; // To change body of implemented methods use File |
+						// Settings | File Templates.
 	}
 
 	@Override
 	public FileLock tryLock(long l, long l2, boolean b) throws IOException {
-		return null;  //To change body of implemented methods use File | Settings | File Templates.
+		return null; // To change body of implemented methods use File |
+						// Settings | File Templates.
 	}
 
 	@Override

@@ -27,18 +27,14 @@ import com.peircean.libgfapi_jni.internal.GlusterOpenOption;
 import com.peircean.libgfapi_jni.internal.UtilJNI;
 import com.peircean.libgfapi_jni.internal.structs.stat;
 
-import lombok.AccessLevel;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-
 /**
  * @author <a href="http://about.me/louiszuckerman">Louis Zuckerman</a>
  */
-@Data
-@NoArgsConstructor(access = AccessLevel.PACKAGE)
 public class GlusterFileChannel extends FileChannel {
+
 	public static final Map<StandardOpenOption, Integer> optionMap = new HashMap<>();
 	public static final Map<PosixFilePermission, Integer> perms = new HashMap<>();
+	private static final long TRANSFER_SIZE = 8192;
 
 	static {
 		optionMap.put(StandardOpenOption.APPEND, GlusterOpenOption.O_APPEND);
@@ -61,12 +57,49 @@ public class GlusterFileChannel extends FileChannel {
 	}
 
 	private GlusterFileSystem fileSystem;
+
 	private GlusterPath path;
+
+	public GlusterPath getPath() {
+		return path;
+	}
+
 	private Set<? extends OpenOption> options = new HashSet<>();
+
+	public Set<? extends OpenOption> getOptions() {
+		return options;
+	}
+
+	public void setOptions(Set<? extends OpenOption> options) {
+		this.options = options;
+	}
+
+	public boolean isClosed() {
+		return closed;
+	}
+
+	public void setClosed(boolean closed) {
+		this.closed = closed;
+	}
+
 	private FileAttribute<?> attrs[] = null;
 	private long fileptr;
 	private long position;
+
+	public long getPosition() {
+		return position;
+	}
+
+	public void setPosition(long position) {
+		this.position = position;
+	}
+
 	private boolean closed = false;
+	private boolean writable;
+
+	public GlusterFileChannel() {
+		super();
+	}
 
 	void init(GlusterFileSystem fileSystem, Path path, Set<? extends OpenOption> options, FileAttribute<?>... attrs)
 			throws IOException {
@@ -280,9 +313,57 @@ public class GlusterFileChannel extends FileChannel {
 	}
 
 	@Override
-	public long transferFrom(ReadableByteChannel readableByteChannel, long l, long l2) throws IOException {
-		return 0; // To change body of implemented methods use File | Settings |
-					// File Templates.
+	public long transferFrom(ReadableByteChannel src, long position, long count) throws IOException {
+		guardClosed();
+		if (!src.isOpen())
+			throw new ClosedChannelException();
+		if (!writable)
+			throw new NonWritableChannelException();
+		if ((position < 0) || (count < 0))
+			throw new IllegalArgumentException();
+		if (position > size())
+			return 0;
+		if (src instanceof GlusterFileChannel)
+			return transferFromFileChannel((GlusterFileChannel) src, position, count);
+		return transferFromArbitraryChannel(src, position, count);
+	}
+
+	private long transferFromFileChannel(GlusterFileChannel src, long position2, long count) {
+		// TODO Auto-generated method stub
+		return 0;
+	}
+
+	private long transferFromArbitraryChannel(ReadableByteChannel src, long position, long count) throws IOException {
+		// Untrusted target: Use a newly-erased buffer
+		int c = (int) Math.min(count, TRANSFER_SIZE);
+		ByteBuffer bb = UtilBuffers.getTemporaryDirectBuffer(c);
+		long tw = 0; // Total bytes written
+		long pos = position;
+		try {
+			UtilBuffers.erase(bb);
+			while (tw < count) {
+				bb.limit((int) Math.min((count - tw), TRANSFER_SIZE));
+				// ## Bug: Will block reading src if this channel
+				// ## is asynchronously closed
+				int nr = src.read(bb);
+				if (nr <= 0)
+					break;
+				bb.flip();
+				int nw = write(bb, pos);
+				tw += nw;
+				if (nw != nr)
+					break;
+				pos += nw;
+				bb.clear();
+			}
+			return tw;
+		} catch (IOException x) {
+			if (tw > 0)
+				return tw;
+			throw x;
+		} finally {
+			UtilBuffers.releaseTemporaryDirectBuffer(bb);
+		}
 	}
 
 	@Override
@@ -373,6 +454,26 @@ public class GlusterFileChannel extends FileChannel {
 			}
 			closed = true;
 		}
+	}
+
+	public FileAttribute<?>[] getAttrs() {
+		return attrs;
+	}
+
+	public void setAttrs(FileAttribute<?>[] attrs) {
+		this.attrs = attrs;
+	}
+
+	public long getFileptr() {
+		return fileptr;
+	}
+
+	public void setFileptr(long fileptr) {
+		this.fileptr = fileptr;
+	}
+
+	public GlusterFileSystem getFileSystem() {
+		return fileSystem;
 	}
 
 }

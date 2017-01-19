@@ -4,6 +4,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
+import java.nio.channels.SeekableByteChannel;
+import java.nio.channels.WritableByteChannel;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.AccessMode;
 import java.nio.file.DirectoryStream;
@@ -25,10 +29,13 @@ import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.nio.file.spi.FileSystemProvider;
+import java.util.Calendar;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import com.peircean.glusterfs.GlusterFileSystem;
 import com.peircean.glusterfs.GlusterPath;
@@ -37,7 +44,21 @@ import com.peircean.glusterfs.GlusterPath;
  * @author <a href="http://about.me/louiszuckerman">Louis Zuckerman</a>
  */
 public class Example {
-	public static FileSystemProvider getProvider(String scheme) {
+	/**
+	 * Logger for this class
+	 */
+	private static final Logger logger = Logger.getLogger(Example.class.getName());
+	private FileSystem fileSystem;
+	private String serverUri;
+	private FileSystemProvider fileSystemProvider;
+
+	private long testUnic = Calendar.getInstance().getTimeInMillis();
+
+	public Example() {
+		super();
+	}
+
+	public FileSystemProvider getProvider(String scheme) {
 		for (FileSystemProvider fsp : FileSystemProvider.installedProviders()) {
 			if (fsp.getScheme().equals(scheme)) {
 				return fsp;
@@ -47,53 +68,131 @@ public class Example {
 	}
 
 	public static void main(String[] args) throws URISyntaxException, IOException, InterruptedException {
+		logger.info("Start main program.");
+		Example totclass = new Example();
+		totclass.createFileSystem();
+		totclass.readFileSystemInfo();
+		totclass.testHiddenFiles();
+		totclass.testPathCreation();
+		totclass.testFileCreationPosixA();
+		totclass.runToate();
+		logger.info("End main program.");
+	}
+
+	private void createFileSystem() throws IOException, URISyntaxException {
+		if (logger.isLoggable(Level.CONFIG)) {
+			logger.logp(Level.CONFIG, "Example", "createFileSystem()", "start"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+		}
+
 		Properties properties = new Properties();
 		properties.load(Example.class.getClassLoader().getResourceAsStream("example.properties"));
-
-		String vagrantBox = properties.getProperty("glusterfs.server");
+		String server = properties.getProperty("glusterfs.server");
 		String volname = properties.getProperty("glusterfs.volume");
-		System.out.println(getProvider("gluster").toString());
-		String mountUri = "gluster://" + vagrantBox + ":" + volname + "/";
-		String testUri = "gluster://" + vagrantBox + ":" + volname + "/baz";
-		Path mountPath = Paths.get(new URI(mountUri));
-		FileSystem fileSystem = FileSystems.newFileSystem(new URI(mountUri), null);
+		logger.info("Provider class is: " + getProvider("gluster").toString());
+		serverUri = "gluster://" + server + ":" + volname + "/";
+		fileSystem = FileSystems.newFileSystem(new URI(serverUri), null);
+		fileSystemProvider = fileSystem.provider();
+
+		if (logger.isLoggable(Level.CONFIG)) {
+			logger.logp(Level.CONFIG, "Example", "createFileSystem()", "end"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+		}
+	}
+
+	private void readFileSystemInfo() throws IOException {
 		FileStore store = fileSystem.getFileStores().iterator().next();
-		System.out.println("TOTAL SPACE: " + store.getTotalSpace());
-		System.out.println("USABLE SPACE: " + store.getUsableSpace());
-		System.out.println("UNALLOCATED SPACE: " + store.getUnallocatedSpace());
-		System.out.println(fileSystem.toString());
+		logger.logp(Level.INFO, "Example", "readFileSystemInfo()", "TOTAL SPACE: " + store.getTotalSpace()); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+		logger.logp(Level.INFO, "Example", "readFileSystemInfo()", "USABLE SPACE: " + store.getUsableSpace()); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+		logger.logp(Level.INFO, "Example", "readFileSystemInfo()", //$NON-NLS-1$ //$NON-NLS-2$
+				"UNALLOCATED SPACE: " + store.getUnallocatedSpace()); //$NON-NLS-1$
+		logger.logp(Level.INFO, "Example", "readFileSystemInfo()", fileSystem.toString()); //$NON-NLS-1$ //$NON-NLS-2$
+	}
+
+	private void testHiddenFiles() throws IOException {
 		String hidden = "/foo/.bar";
-		boolean isHidden = fileSystem.provider().isHidden(new GlusterPath(((GlusterFileSystem) fileSystem), hidden));
-		System.out.println("Is " + hidden + " hidden? " + isHidden);
+		boolean isHidden = fileSystemProvider.isHidden(new GlusterPath(((GlusterFileSystem) fileSystem), hidden));
+		System.out.println("Is " + hidden + " hidden ? " + isHidden);
 		hidden = "/foo/bar";
-		isHidden = fileSystem.provider().isHidden(new GlusterPath(((GlusterFileSystem) fileSystem), hidden));
-		System.out.println("Is " + hidden + " hidden? " + isHidden);
+		isHidden = fileSystemProvider.isHidden(new GlusterPath(((GlusterFileSystem) fileSystem), hidden));
+		System.out.println("Is " + hidden + " hidden ? " + isHidden);
+	}
+
+	private void testPathCreation() throws URISyntaxException {
+		String testFile = serverUri + "baz" + testUnic;
+		logger.info("Path string is: " + testFile);
+		Path glusterPath = Paths.get(new URI(testFile));
+		logger.info("Path from Paths is: " + glusterPath.getClass());
+		logger.info("Path is:" + glusterPath);
+		Path path = fileSystem.getPath("bazA" + testUnic);
+		logger.info("Path from filesystem: " + path.toFile().toString());
+		logger.info("File exists ? " + path + " - " + path.toFile().exists());
+	}
+
+	private void testFileCreationPosixA() throws URISyntaxException, IOException {
 		Set<PosixFilePermission> posixFilePermissions = PosixFilePermissions.fromString("rw-rw-rw-");
 		FileAttribute<Set<PosixFilePermission>> attrs = PosixFilePermissions.asFileAttribute(posixFilePermissions);
-		Path glusterPath = Paths.get(new URI(testUri));
-		System.out.println(glusterPath.getClass());
-		System.out.println(glusterPath);
-		System.out.println(glusterPath.getFileSystem().toString());
-		try {
-			Files.createFile(glusterPath, attrs);
-			System.out.println("File created");
-		} catch (IOException e) {
-			System.out.println("File exists, created at " + Files.getLastModifiedTime(glusterPath));
-		}
-		String bigFileUri = "gluster://" + vagrantBox + ":" + volname + "/bigfile.txt";
+		String testFile = serverUri + "baz" + testUnic;
+		Path glusterPath = Paths.get(new URI(testFile));
+		Path crf = Files.createFile(glusterPath, attrs);
+		logger.info("Create file from Paths " + crf);
+		Path path = fileSystem.getPath("/bazA" + testUnic);
+		logger.info("Path from filesystem: " + path.toFile().toString());
+		Path crf1 = Files.createFile(path, attrs);
+		logger.info("File exists ? " + Files.exists(crf1));
+	}
+
+	private void runToate() throws IOException, URISyntaxException, InterruptedException {
+		String testFile = serverUri + "bazB" + testUnic;
+
+		String bigFileUri = serverUri + "bigfile" + testUnic + ".txt";
 		Path bigFile = Paths.get(new URI(bigFileUri));
-		try {
-			InputStream res = Example.class.getResourceAsStream("/bigfile.txt");
-			if (res != null) {
-				Files.copy(res, bigFile, StandardCopyOption.REPLACE_EXISTING);
-			} else {
-				System.out.println("Resource not found ");
-			}
-		} catch (Exception e) {
-			e.printStackTrace();
+		if (Files.exists(bigFile)) {
+			Files.delete(bigFile);
 		}
-		System.out.println("Write big file end.");
+		// Input stream to gluster
+		logger.fine("TEST1 - Copy big file to gluster");
+		InputStream res = Example.class.getResourceAsStream("/bigfile.txt");
+		if (res != null) {
+			Set<PosixFilePermission> posixFilePermissions = PosixFilePermissions.fromString("rw-rw-rw-");
+			FileAttribute<Set<PosixFilePermission>> attrs = PosixFilePermissions.asFileAttribute(posixFilePermissions);
+			// FileChannel glusterBigFileChannel = FileChannel.open(createdFile,
+			// StandardOpenOption.WRITE,
+			// StandardOpenOption.TRUNCATE_EXISTING);
+			// ReadableByteChannel lll = Channels.newChannel(res);
+			Files.copy(res, bigFile);
+			Files.setPosixFilePermissions(bigFile, posixFilePermissions);
+			// glusterBigFileChannel.transferFrom(lll, 0, lll.);
+			System.out.println("Write big file copy end. Size copy:" + Files.size(bigFile));
+			// glusterBigFileChannel.close();
+		} else {
+			System.out.println("Resource not found ");
+		}
+		// Gluster to temporary
+		logger.fine("Big file transferTo start.");
+		FileChannel glusterBigFile = FileChannel.open(bigFile, StandardOpenOption.READ);
+		logger.fine("Big file transferTo start with size:" + glusterBigFile.size());
+		Path temp = Files.createTempFile("pre-", ".txt");
+		bigFile.getFileSystem().provider().copy(bigFile, temp, StandardCopyOption.COPY_ATTRIBUTES,
+				StandardCopyOption.REPLACE_EXISTING);
+		WritableByteChannel out = Channels.newChannel(
+				Files.newOutputStream(temp, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING));
+		glusterBigFile.transferTo(0, glusterBigFile.size(), out);
+		out.close();
+		System.out.println("Big file transferTo end to " + temp.toString() + " size: " + Files.size(temp));
+		System.out.println("Big file transferTo start.");
+		System.out.println("Big file transferTo start with size:" + glusterBigFile.size());
+		glusterBigFile.close();
+		Path bigFile2Path = bigFile.getFileSystem().getPath("/targetbig2.txt");
+
+		Files.deleteIfExists(bigFile2Path);
+
+		SeekableByteChannel outG = Files.newByteChannel(bigFile2Path, StandardOpenOption.CREATE,
+				StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW);
+		glusterBigFile = FileChannel.open(bigFile, StandardOpenOption.READ);
+		glusterBigFile.transferTo(0, glusterBigFile.size(), outG);
+		outG.close();
+		System.out.println("Big file transferTo end to " + temp.toString() + " size: " + Files.size(temp));
 		String hello = "Hello, ";
+		Path glusterPath = Paths.get(new URI(testFile));
 		Files.write(glusterPath, hello.getBytes(), StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING);
 		String world = "world!";
 		Files.write(glusterPath, world.getBytes(), StandardOpenOption.WRITE, StandardOpenOption.APPEND);
@@ -111,18 +210,23 @@ public class Example {
 			System.out.println("Can't execute file, that's good.");
 		}
 
-		Path symlinkPath = Paths.get(new URI(mountUri + "symlink"));
-		Path symlinkTarget = Paths.get(new URI(mountUri + "symlinktarget"));
+		Path symlinkPath = Paths.get(new URI(serverUri + "symlink"));
+		Path symlinkTarget = Paths.get(new URI(serverUri + "symlinktarget"));
+		if (Files.exists(symlinkPath)) {
+			Files.delete(symlinkPath);
+		}
 		Files.createSymbolicLink(symlinkPath, symlinkTarget);
 		System.out.println("SYMLINK: " + symlinkPath.toString() + " => " + Files.readSymbolicLink(symlinkPath));
-
 		Path copyPath = glusterPath.resolveSibling("copy");
 		// Files.createFile(copyPath,
 		// PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-rw-rw-")));
+		if (Files.exists(copyPath)) {
+			Files.delete(copyPath);
+		}
 		Files.copy(glusterPath, copyPath, StandardCopyOption.REPLACE_EXISTING);
 		long copySize = Files.size(copyPath);
 		System.out.println("Source and copy are " + (bazSize == copySize ? "" : "NOT") + " equal.");
-
+		Path mountPath = Paths.get(new URI(serverUri));
 		try {
 			Files.newDirectoryStream(mountPath.resolve("bazzzzz"));
 		} catch (NotDirectoryException e) {
@@ -173,11 +277,14 @@ public class Example {
 		}
 
 		WatchService watchService = fileSystem.newWatchService();
-		Path one = Paths.get(new URI("gluster://" + vagrantBox + ":" + volname + "/one"));
+		Path one = Paths.get(new URI(serverUri + "one"));
 
 		System.out.println("STARTSWITH empty: " + one.startsWith("/"));
-		posixFilePermissions = PosixFilePermissions.fromString("rwxrwxrwx");
-		attrs = PosixFilePermissions.asFileAttribute(posixFilePermissions);
+		Set<PosixFilePermission> posixFilePermissions = PosixFilePermissions.fromString("rwxrwxrwx");
+		FileAttribute<Set<PosixFilePermission>> attrs = PosixFilePermissions.asFileAttribute(posixFilePermissions);
+		if (Files.exists(one) && Files.isDirectory(one)) {
+			FilesHelpers.deleteDirectoryRecursively(one);
+		}
 		Files.createDirectory(one, attrs);
 		one.register(watchService, StandardWatchEventKinds.ENTRY_CREATE, StandardWatchEventKinds.ENTRY_MODIFY,
 				StandardWatchEventKinds.ENTRY_DELETE);
@@ -200,7 +307,7 @@ public class Example {
 			}
 			take.reset();
 		}
-
 		fileSystem.close();
 	}
+
 }

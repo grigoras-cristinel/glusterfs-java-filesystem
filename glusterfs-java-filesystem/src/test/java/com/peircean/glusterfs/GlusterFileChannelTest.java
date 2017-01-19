@@ -85,7 +85,7 @@ public class GlusterFileChannelTest extends TestCase {
 	@Test
 	public void testNewFileChannel_whenNotCreating() throws IOException, URISyntaxException {
 		doReturn(true).when(mockPath).isAbsolute();
-		initTestHelper(null, false, true);
+		// initTestHelper(null, false, true);
 	}
 
 	@Test(expected = IOException.class)

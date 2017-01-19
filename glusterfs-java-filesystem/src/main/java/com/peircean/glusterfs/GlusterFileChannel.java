@@ -21,6 +21,8 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import com.peircean.libgfapi_jni.internal.GLFS;
 import com.peircean.libgfapi_jni.internal.GlusterOpenOption;
@@ -31,10 +33,15 @@ import com.peircean.libgfapi_jni.internal.structs.stat;
  * @author <a href="http://about.me/louiszuckerman">Louis Zuckerman</a>
  */
 public class GlusterFileChannel extends FileChannel {
+	/**
+	 * Logger for this class
+	 */
+	private static final Logger logger = Logger.getLogger(GlusterFileChannel.class.getName());
 
 	public static final Map<StandardOpenOption, Integer> optionMap = new HashMap<>();
 	public static final Map<PosixFilePermission, Integer> perms = new HashMap<>();
-	private static final long TRANSFER_SIZE = 8192;
+	private static final int TRANSFER_SIZE = 8192;
+	private static final int TRANSFER_SIZE_GLUSTER = 8192;
 
 	static {
 		optionMap.put(StandardOpenOption.APPEND, GlusterOpenOption.O_APPEND);
@@ -117,6 +124,7 @@ public class GlusterFileChannel extends FileChannel {
 		boolean createNew = options.contains(StandardOpenOption.CREATE_NEW);
 		if (options.contains(StandardOpenOption.CREATE) || createNew) {
 			fileptr = GLFS.glfs_creat(fileSystem.getVolptr(), pathString, flags, mode);
+			writable = true;
 		}
 
 		if (createNew && 0 == fileptr) {
@@ -125,6 +133,9 @@ public class GlusterFileChannel extends FileChannel {
 
 		if (0 >= fileptr) {
 			fileptr = GLFS.glfs_open(fileSystem.getVolptr(), pathString, flags);
+			System.out.println(
+					"Cred ca am dat open aici:" + fileSystem.getVolptr() + " flags :" + flags + " paths " + pathString);
+			writable = true;
 		}
 
 		if (0 >= fileptr) {
@@ -307,13 +318,63 @@ public class GlusterFileChannel extends FileChannel {
 	}
 
 	@Override
-	public long transferTo(long l, long l2, WritableByteChannel writableByteChannel) throws IOException {
-		return 0; // To change body of implemented methods use File | Settings |
-					// File Templates.
+	public long transferTo(long position, long count, WritableByteChannel writableByteChannel) throws IOException {
+		if (logger.isLoggable(Level.FINE)) {
+			logger.fine("transferTo() start");
+		}
+		guardClosed();
+		if (!this.isOpen())
+			throw new ClosedChannelException();
+		if ((position < 0) || (count < 0))
+			throw new IllegalArgumentException();
+		if (position > size())
+			return 0;
+		int icount = (int) Math.min(count, Integer.MAX_VALUE);
+		long sz = size();
+		if ((sz - position) < icount)
+			icount = (int) (sz - position);
+		if (writableByteChannel instanceof GlusterFileChannel) {
+			System.out.println("Scriu in gluster.");
+			return ((GlusterFileChannel) writableByteChannel).transferFromFileChannel(this, position, count);
+		}
+		return transferToArbitraryChannel(position, icount, writableByteChannel);
+	}
+
+	private long transferToArbitraryChannel(long position, int icount, WritableByteChannel target) throws IOException {
+		int c = Math.min(icount, TRANSFER_SIZE);
+		ByteBuffer bb = UtilBuffers.getTemporaryDirectBuffer(c);
+		long tw = 0; // Total bytes written
+		long pos = position;
+		try {
+			UtilBuffers.erase(bb);
+			while (tw < icount) {
+				bb.limit(Math.min((int) (icount - tw), TRANSFER_SIZE));
+				int nr = read(bb, pos);
+				if (nr <= 0)
+					break;
+				bb.flip();
+				// ## Bug: Will block writing target if this channel
+				// ## is asynchronously closed
+				int nw = target.write(bb);
+				tw += nw;
+				if (nw != nr)
+					break;
+				pos += nw;
+				bb.clear();
+			}
+			return tw;
+		} catch (IOException x) {
+			if (tw > 0)
+				return tw;
+			throw x;
+		} finally {
+			UtilBuffers.releaseTemporaryDirectBuffer(bb);
+		}
 	}
 
 	@Override
 	public long transferFrom(ReadableByteChannel src, long position, long count) throws IOException {
+		logger.fine("transferFrom() - start");
 		guardClosed();
 		if (!src.isOpen())
 			throw new ClosedChannelException();
@@ -323,17 +384,48 @@ public class GlusterFileChannel extends FileChannel {
 			throw new IllegalArgumentException();
 		if (position > size())
 			return 0;
+		System.out.println("");
 		if (src instanceof GlusterFileChannel)
 			return transferFromFileChannel((GlusterFileChannel) src, position, count);
 		return transferFromArbitraryChannel(src, position, count);
 	}
 
-	private long transferFromFileChannel(GlusterFileChannel src, long position2, long count) {
-		// TODO Auto-generated method stub
-		return 0;
+	private long transferFromFileChannel(GlusterFileChannel src, long position2, long count) throws IOException {
+		logger.fine("transferFromFileChannel() - start");
+		// Untrusted target: Use a newly-erased buffer
+		int c = (int) Math.min(count, TRANSFER_SIZE_GLUSTER);
+		ByteBuffer bb = UtilBuffers.getTemporaryDirectBuffer(c);
+		long tw = 0; // Total bytes written
+		long pos = position;
+		try {
+			UtilBuffers.erase(bb);
+			while (tw < count) {
+				bb.limit((int) Math.min((count - tw), TRANSFER_SIZE_GLUSTER));
+				// ## Bug: Will block reading src if this channel
+				// ## is asynchronously closed
+				int nr = src.read(bb);
+				if (nr <= 0)
+					break;
+				bb.flip();
+				int nw = write(bb, pos);
+				tw += nw;
+				if (nw != nr)
+					break;
+				pos += nw;
+				bb.clear();
+			}
+			return tw;
+		} catch (IOException x) {
+			if (tw > 0)
+				return tw;
+			throw x;
+		} finally {
+			UtilBuffers.releaseTemporaryDirectBuffer(bb);
+		}
 	}
 
 	private long transferFromArbitraryChannel(ReadableByteChannel src, long position, long count) throws IOException {
+		logger.fine("transferFromArbitraryChannel() - start, count " + count);
 		// Untrusted target: Use a newly-erased buffer
 		int c = (int) Math.min(count, TRANSFER_SIZE);
 		ByteBuffer bb = UtilBuffers.getTemporaryDirectBuffer(c);
@@ -356,6 +448,7 @@ public class GlusterFileChannel extends FileChannel {
 				pos += nw;
 				bb.clear();
 			}
+			logger.fine("transferFromArbitraryChannel() - end");
 			return tw;
 		} catch (IOException x) {
 			if (tw > 0)
@@ -364,6 +457,7 @@ public class GlusterFileChannel extends FileChannel {
 		} finally {
 			UtilBuffers.releaseTemporaryDirectBuffer(bb);
 		}
+
 	}
 
 	@Override
@@ -389,13 +483,11 @@ public class GlusterFileChannel extends FileChannel {
 		if (0 > read) {
 			throw new IOException();
 		}
-
+		byteBuffer.position((int) read);
 		seek = GLFS.glfs_lseek(fileptr, this.position, whence);
-
 		if (0 > seek) {
 			throw new IOException(UtilJNI.strerror());
 		}
-
 		return (int) read;
 	}
 
@@ -405,9 +497,11 @@ public class GlusterFileChannel extends FileChannel {
 		if (position < 0) {
 			throw new IllegalArgumentException();
 		}
+		logger.fine("Trebuie sa fac write cu options" + options);
 		if (!options.contains(StandardOpenOption.WRITE)) {
 			throw new NonWritableChannelException();
 		}
+		logger.fine("Trebuie sa fac write cu " + byteBuffer.position());
 		if (position >= size()) {
 			byte[] bytes = byteBuffer.array();
 			byte[] temp = Arrays.copyOf(bytes, bytes.length + (int) (position - size()));
@@ -419,30 +513,29 @@ public class GlusterFileChannel extends FileChannel {
 			throw new IOException();
 		}
 		byte[] bytes = byteBuffer.array();
+		logger.fine("Trebuie sa fac write cu " + bytes.length);
 		long written = GLFS.glfs_write(fileptr, bytes, bytes.length, 0);
 		seek = GLFS.glfs_lseek(fileptr, this.position, whence);
 		if (seek < 0) {
 			throw new IOException();
 		}
+		byteBuffer.position((int) written);
 		return (int) written;
 	}
 
 	@Override
 	public MappedByteBuffer map(MapMode mapMode, long l, long l2) throws IOException {
-		return null; // To change body of implemented methods use File |
-						// Settings | File Templates.
+		throw new IOException("Unsuported operation exception");
 	}
 
 	@Override
 	public FileLock lock(long l, long l2, boolean b) throws IOException {
-		return null; // To change body of implemented methods use File |
-						// Settings | File Templates.
+		throw new IOException("Unsuported operation exception");
 	}
 
 	@Override
 	public FileLock tryLock(long l, long l2, boolean b) throws IOException {
-		return null; // To change body of implemented methods use File |
-						// Settings | File Templates.
+		throw new IOException("Unsuported operation exception");
 	}
 
 	@Override

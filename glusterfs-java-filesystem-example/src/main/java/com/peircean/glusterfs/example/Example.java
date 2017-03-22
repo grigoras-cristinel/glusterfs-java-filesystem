@@ -26,6 +26,7 @@ import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
 import java.nio.file.attribute.FileAttribute;
+import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.nio.file.spi.FileSystemProvider;
@@ -83,7 +84,6 @@ public class Example {
 		if (logger.isLoggable(Level.CONFIG)) {
 			logger.logp(Level.CONFIG, "Example", "createFileSystem()", "start"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 		}
-
 		Properties properties = new Properties();
 		properties.load(Example.class.getClassLoader().getResourceAsStream("example.properties"));
 		String server = properties.getProperty("glusterfs.server");
@@ -159,6 +159,8 @@ public class Example {
 			// StandardOpenOption.TRUNCATE_EXISTING);
 			// ReadableByteChannel lll = Channels.newChannel(res);
 			Files.copy(res, bigFile);
+			PosixFileAttributeView filesAttView = Files.getFileAttributeView(bigFile, PosixFileAttributeView.class);
+			System.out.println(filesAttView);
 			Files.setPosixFilePermissions(bigFile, posixFilePermissions);
 			// glusterBigFileChannel.transferFrom(lll, 0, lll.);
 			System.out.println("Write big file copy end. Size copy:" + Files.size(bigFile));
@@ -193,7 +195,7 @@ public class Example {
 		System.out.println("Big file transferTo end to " + temp.toString() + " size: " + Files.size(temp));
 		String hello = "Hello, ";
 		Path glusterPath = Paths.get(new URI(testFile));
-		Files.write(glusterPath, hello.getBytes(), StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING);
+		Files.write(glusterPath, hello.getBytes(), StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW);
 		String world = "world!";
 		Files.write(glusterPath, world.getBytes(), StandardOpenOption.WRITE, StandardOpenOption.APPEND);
 		long bazSize = Files.size(glusterPath);

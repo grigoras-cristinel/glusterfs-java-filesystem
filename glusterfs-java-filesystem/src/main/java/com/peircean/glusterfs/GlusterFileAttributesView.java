@@ -34,7 +34,7 @@ public class GlusterFileAttributesView {
 		@Override
 		public void setOwner(UserPrincipal owner) throws IOException {
 			// TODO Auto-generated method stub
-
+			// ignored
 		}
 
 		@Override
@@ -59,11 +59,12 @@ public class GlusterFileAttributesView {
 		@Override
 		public void setPermissions(Set<PosixFilePermission> perms) throws IOException {
 			int mode = GlusterFileAttributes.permsToMode(perms);
-			GLFS.glfs_chmod(file.getFileSystem().getVolptr(), file.toAbsolutePath().toString(), mode);
+			GLFS.glfs_chmod(file.getFileSystem().getVolptr(), file.getString(), mode);
 		}
 
 		@Override
 		public void setGroup(GroupPrincipal group) throws IOException {
+			// ignored
 		}
 
 		@Override

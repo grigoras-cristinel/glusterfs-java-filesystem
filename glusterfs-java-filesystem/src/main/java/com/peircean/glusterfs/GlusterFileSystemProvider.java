@@ -570,7 +570,9 @@ public class GlusterFileSystemProvider extends FileSystemProvider {
 	}
 
 	int close(long volptr) {
-		return glfs_fini(volptr);
+		int retval = glfs_fini(volptr);
+		System.out.println("Rezultat close opperation:" + retval + "--" + UtilJNI.errno());
+		return retval;
 	}
 
 	long getTotalSpace(long volptr) throws IOException {

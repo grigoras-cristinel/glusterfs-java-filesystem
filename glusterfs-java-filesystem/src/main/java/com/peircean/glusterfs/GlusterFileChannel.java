@@ -118,8 +118,15 @@ public class GlusterFileChannel extends FileChannel {
 		this.options = options;
 
 		int flags = parseOptions(options);
-		int mode = GlusterFileAttributes.parseAttrs(attrs);
 
+		int mode = GlusterFileAttributes.parseAttrs(attrs);
+		if (attrs == null || attrs.length == 0 || mode == 0) {
+			/*
+			 * Daca nu am fileAttributes fisierul este creat cu mode 0 ceea ce
+			 * nu e bine. Pun default -rw-rw-rw-
+			 */
+			mode = 438;
+		}
 		String pathString = path.toUri().getPath();
 		boolean createNew = options.contains(StandardOpenOption.CREATE_NEW);
 		if (options.contains(StandardOpenOption.CREATE) || createNew) {

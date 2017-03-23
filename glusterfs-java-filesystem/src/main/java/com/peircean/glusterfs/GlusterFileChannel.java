@@ -144,7 +144,6 @@ public class GlusterFileChannel extends FileChannel {
 					"Cred ca am dat open aici:" + fileSystem.getVolptr() + " flags :" + flags + " paths " + pathString);
 			writable = true;
 		}
-
 		if (0 >= fileptr) {
 			throw new IOException(
 					"Unable to create or open file '" + pathString + "' on volume '" + fileSystem.toString() + "'");
@@ -172,6 +171,12 @@ public class GlusterFileChannel extends FileChannel {
 		}
 		position += read;
 		byteBuffer.position((int) read);
+		if (0 == read) {
+			/*
+			 * End of file , precum in glfs-util.c
+			 */
+			return -1;
+		}
 		return (int) read;
 	}
 

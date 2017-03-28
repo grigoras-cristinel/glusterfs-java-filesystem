@@ -50,9 +50,6 @@ import com.peircean.libgfapi_jni.internal.UtilJNI;
 import com.peircean.libgfapi_jni.internal.structs.stat;
 import com.peircean.libgfapi_jni.internal.structs.statvfs;
 
-import lombok.AccessLevel;
-import lombok.Getter;
-
 /**
  * @author <a href="http://about.me/louiszuckerman">Louis Zuckerman</a>
  */
@@ -61,7 +58,6 @@ public class GlusterFileSystemProvider extends FileSystemProvider {
 	public static final String GLUSTER = "gluster";
 	public static final int GLUSTERD_PORT = 24007;
 	public static final String TCP = "tcp";
-	@Getter(AccessLevel.PACKAGE)
 	private static Map<String, GlusterFileSystem> cache = new HashMap<>();
 
 	@Override
@@ -591,5 +587,9 @@ public class GlusterFileSystemProvider extends FileSystemProvider {
 		statvfs buf = new statvfs();
 		GLFS.glfs_statvfs(volptr, "/", buf);
 		return buf.f_bsize * buf.f_bfree;
+	}
+
+	public static Map<String, GlusterFileSystem> getCache() {
+		return cache;
 	}
 }

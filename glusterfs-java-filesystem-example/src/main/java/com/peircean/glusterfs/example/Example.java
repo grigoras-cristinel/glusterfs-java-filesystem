@@ -180,19 +180,17 @@ public class Example {
 		glusterBigFile.transferTo(0, glusterBigFile.size(), out);
 		out.close();
 		System.out.println("Big file transferTo end to " + temp.toString() + " size: " + Files.size(temp));
-		System.out.println("Big file transferTo start.");
-		System.out.println("Big file transferTo start with size:" + glusterBigFile.size());
+		System.out.println("Big file transferFrom start.");
+		System.out.println("Big file transferFrom start with size:" + glusterBigFile.size());
 		glusterBigFile.close();
 		Path bigFile2Path = bigFile.getFileSystem().getPath("/targetbig2.txt");
-
 		Files.deleteIfExists(bigFile2Path);
-
 		SeekableByteChannel outG = Files.newByteChannel(bigFile2Path, StandardOpenOption.CREATE,
 				StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW);
 		glusterBigFile = FileChannel.open(bigFile, StandardOpenOption.READ);
 		glusterBigFile.transferTo(0, glusterBigFile.size(), outG);
 		outG.close();
-		System.out.println("Big file transferTo end to " + temp.toString() + " size: " + Files.size(temp));
+		System.out.println("Big file transferFrom end to " + temp.toString() + " size: " + Files.size(temp));
 		String hello = "Hello, ";
 		Path glusterPath = Paths.get(new URI(testFile));
 		Files.write(glusterPath, hello.getBytes(), StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW);

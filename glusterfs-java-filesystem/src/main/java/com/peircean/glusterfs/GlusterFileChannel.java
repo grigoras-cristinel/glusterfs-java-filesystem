@@ -21,7 +21,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.peircean.libgfapi_jni.internal.GLFS;
@@ -331,9 +330,6 @@ public class GlusterFileChannel extends FileChannel {
 
 	@Override
 	public long transferTo(long position, long count, WritableByteChannel writableByteChannel) throws IOException {
-		if (logger.isLoggable(Level.FINE)) {
-			logger.fine("transferTo() start");
-		}
 		guardClosed();
 		if (!this.isOpen())
 			throw new ClosedChannelException();
@@ -386,7 +382,6 @@ public class GlusterFileChannel extends FileChannel {
 
 	@Override
 	public long transferFrom(ReadableByteChannel src, long position, long count) throws IOException {
-		logger.fine("transferFrom() - start");
 		guardClosed();
 		if (!src.isOpen())
 			throw new ClosedChannelException();
@@ -396,14 +391,12 @@ public class GlusterFileChannel extends FileChannel {
 			throw new IllegalArgumentException();
 		if (position > size())
 			return 0;
-		System.out.println("");
 		if (src instanceof GlusterFileChannel)
 			return transferFromFileChannel((GlusterFileChannel) src, position, count);
 		return transferFromArbitraryChannel(src, position, count);
 	}
 
 	private long transferFromFileChannel(GlusterFileChannel src, long position2, long count) throws IOException {
-		logger.fine("transferFromFileChannel() - start");
 		// Untrusted target: Use a newly-erased buffer
 		int c = (int) Math.min(count, TRANSFER_SIZE_GLUSTER);
 		ByteBuffer bb = UtilBuffers.getTemporaryDirectBuffer(c);
@@ -426,6 +419,9 @@ public class GlusterFileChannel extends FileChannel {
 				pos += nw;
 				bb.clear();
 			}
+			if (tw > count) {
+				throw new RuntimeException("Exceptie transfer lungime gresita");
+			}
 			return tw;
 		} catch (IOException x) {
 			if (tw > 0)
@@ -437,7 +433,6 @@ public class GlusterFileChannel extends FileChannel {
 	}
 
 	private long transferFromArbitraryChannel(ReadableByteChannel src, long position, long count) throws IOException {
-		logger.fine("transferFromArbitraryChannel() - start, count " + count);
 		// Untrusted target: Use a newly-erased buffer
 		int c = (int) Math.min(count, TRANSFER_SIZE);
 		ByteBuffer bb = UtilBuffers.getTemporaryDirectBuffer(c);
@@ -453,14 +448,13 @@ public class GlusterFileChannel extends FileChannel {
 				if (nr <= 0)
 					break;
 				bb.flip();
-				int nw = write(bb, pos);
+				int nw = writeAtPositionNoCheck(bb, pos);
 				tw += nw;
 				if (nw != nr)
 					break;
 				pos += nw;
 				bb.clear();
 			}
-			logger.fine("transferFromArbitraryChannel() - end");
 			return tw;
 		} catch (IOException x) {
 			if (tw > 0)
@@ -505,34 +499,48 @@ public class GlusterFileChannel extends FileChannel {
 
 	@Override
 	public int write(ByteBuffer byteBuffer, long position) throws IOException {
-		guardClosed();
-		if (position < 0) {
-			throw new IllegalArgumentException();
+		if (byteBuffer == null) {
+			throw new NullPointerException();
 		}
-		logger.fine("Trebuie sa fac write cu options" + options);
+		if (position < 0) {
+			throw new IllegalArgumentException("Negative position");
+		}
+		guardClosed();
 		if (!options.contains(StandardOpenOption.WRITE)) {
 			throw new NonWritableChannelException();
 		}
-		logger.fine("Trebuie sa fac write cu " + byteBuffer.position());
-		if (position >= size()) {
+		return writeAtPositionNoCheck(byteBuffer, position);
+	}
+
+	private int writeAtPositionNoCheck(ByteBuffer byteBuffer, long position) throws IOException {
+		try {
+			int bytesToWrite = byteBuffer.remaining();
+			long lsize = size();
+			if (position >= lsize) {
+				/*
+				 * If has to write ouside off seek
+				 */
+				byte[] bytes = Arrays.copyOfRange(byteBuffer.array(), 0, bytesToWrite);
+				byte[] temp = Arrays.copyOf(bytes, bytes.length + (int) (position - lsize));
+				bytesToWrite = temp.length;
+				byteBuffer = ByteBuffer.wrap(temp);
+			}
+			int whence = 0; // SEEK_SET
+			int seek = GLFS.glfs_lseek(fileptr, position, whence);
+			if (seek < 0) {
+				throw new IOException();
+			}
 			byte[] bytes = byteBuffer.array();
-			byte[] temp = Arrays.copyOf(bytes, bytes.length + (int) (position - size()));
-			byteBuffer = ByteBuffer.wrap(temp);
+			long written = GLFS.glfs_write(fileptr, bytes, bytes.length, 0);
+			seek = GLFS.glfs_lseek(fileptr, this.position, whence);
+			if (seek < 0) {
+				throw new IOException();
+			}
+			byteBuffer.position((int) written);
+			return (int) written;
+		} finally {
+
 		}
-		int whence = 0; // SEEK_SET
-		int seek = GLFS.glfs_lseek(fileptr, position, whence);
-		if (seek < 0) {
-			throw new IOException();
-		}
-		byte[] bytes = byteBuffer.array();
-		logger.fine("Trebuie sa fac write cu " + bytes.length);
-		long written = GLFS.glfs_write(fileptr, bytes, bytes.length, 0);
-		seek = GLFS.glfs_lseek(fileptr, this.position, whence);
-		if (seek < 0) {
-			throw new IOException();
-		}
-		byteBuffer.position((int) written);
-		return (int) written;
 	}
 
 	@Override

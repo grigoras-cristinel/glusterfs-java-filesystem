@@ -6,9 +6,9 @@
       <groupId>com.peircean.glusterfs</groupId>
       <version>1.0.5</version>
    </parent>
+   <version>1.0.6</version>
    <modelVersion>4.0.0</modelVersion>
    <artifactId>glusterfs-java-filesystem</artifactId>
-   <version>1.0.6</version>
    <properties>
       <powermock.version>1.5.2</powermock.version>
    </properties>
@@ -71,34 +71,38 @@
          </plugin>
       </plugins>
    </build>
-
    <dependencies>
       <dependency>
          <groupId>com.peircean.libgfapi-jni</groupId>
          <artifactId>libgfapi-linux64</artifactId>
          <version>1.0.5</version>
       </dependency>
-
       <dependency>
          <groupId>org.mockito</groupId>
          <artifactId>mockito-core</artifactId>
          <version>1.9.5</version>
          <scope>test</scope>
       </dependency>
-
       <dependency>
          <groupId>org.powermock</groupId>
          <artifactId>powermock-module-junit4</artifactId>
          <version>${powermock.version}</version>
          <scope>test</scope>
       </dependency>
-
       <dependency>
          <groupId>org.powermock</groupId>
          <artifactId>powermock-api-mockito</artifactId>
          <version>${powermock.version}</version>
          <scope>test</scope>
       </dependency>
+      <!-- https://mvnrepository.com/artifact/org.apache.commons/commons-lang3 -->
+      <dependency>
+         <groupId>org.apache.commons</groupId>
+         <artifactId>commons-lang3</artifactId>
+         <version>3.5</version>
+         <scope>test</scope>
+      </dependency>
+
    </dependencies>
 
    <profiles>

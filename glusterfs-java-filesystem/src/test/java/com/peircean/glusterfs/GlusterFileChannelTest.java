@@ -9,14 +9,17 @@ import static org.mockito.Mockito.when;
 import static org.powermock.api.mockito.PowerMockito.mockStatic;
 import static org.powermock.api.mockito.PowerMockito.verifyStatic;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.NonReadableChannelException;
 import java.nio.channels.NonWritableChannelException;
+import java.nio.channels.ReadableByteChannel;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.OpenOption;
 import java.nio.file.StandardOpenOption;
@@ -27,11 +30,13 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.Spy;
+import org.mockito.internal.verification.VerificationModeFactory;
 import org.powermock.api.mockito.PowerMockito;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
@@ -58,7 +63,12 @@ public class GlusterFileChannelTest extends TestCase {
 	@Spy
 	private GlusterFileChannel channel = new GlusterFileChannel();
 
+	private static String TEST_STRING11000 = RandomStringUtils.random(11000,
+			"0123456789qwertyuiopQWERTYUIOPASDFGHJKLZXCVBNMasdfghjklmznxbcv");
+	private static String TEST_STRING7000 = RandomStringUtils.random(7000);
+
 	@Test(expected = IllegalStateException.class)
+
 	public void testNewFileChannel_whenNotAbsolutePath() throws IOException, URISyntaxException {
 		doReturn(false).when(mockPath).isAbsolute();
 		initTestHelper(null, false, false);
@@ -416,6 +426,52 @@ public class GlusterFileChannelTest extends TestCase {
 		verify(channel).guardClosed();
 	}
 
+	@Test
+	public void testRead2ArgStringA() throws IOException, URISyntaxException {
+		doReturn(true).when(mockPath).isAbsolute();
+		initTestHelper(StandardOpenOption.CREATE_NEW, true, true);
+		long fileptr = 1234L;
+		long defaultPosition = 0L;
+		channel.setFileptr(fileptr);
+		channel.setPosition(defaultPosition);
+		byte[] bytes = TEST_STRING11000.getBytes();
+		doNothing().when(channel).guardClosed();
+
+		Set<StandardOpenOption> options = new HashSet<>();
+		options.add(StandardOpenOption.WRITE);
+		options.add(StandardOpenOption.CREATE_NEW);
+		channel.setOptions(options);
+
+		doReturn(8192l).when(channel).size();
+
+		mockStatic(GLFS.class);
+
+		doReturn(bytes).when(mockBuffer).array();
+
+		long expectedRet = bytes.length;
+		byte[] range1 = Arrays.copyOfRange(bytes, 0, 8192);
+		when(GLFS.glfs_write(fileptr, range1, 8192, 0)).thenReturn(8192);
+		int ramas1 = (int) (expectedRet - 8192);
+		byte[] range2 = Arrays.copyOfRange(bytes, 8192, ramas1 + 8192);
+		when(GLFS.glfs_write(fileptr, range2, ramas1, 0)).thenReturn(ramas1);
+		when(GLFS.glfs_lseek(fileptr, 0, 0)).thenReturn(0);
+		when(GLFS.glfs_lseek(fileptr, ramas1, 0)).thenReturn(ramas1);
+		ReadableByteChannel readChannel = Channels.newChannel(new ByteArrayInputStream(bytes));
+		long ret = channel.transferFrom(readChannel, 0, expectedRet);
+		assertEquals(expectedRet, ret);
+		verifyStatic(VerificationModeFactory.times(3));
+		GLFS.glfs_lseek(fileptr, 0, 0);
+		verifyStatic(VerificationModeFactory.times(1));
+		GLFS.glfs_lseek(fileptr, 8192, 0);
+		System.out.println(
+				range1.length + "-" + Arrays.toString(range1) + "\n" + range2.length + "-" + Arrays.toString(range2));
+		// final range 2808
+		verifyStatic();
+		GLFS.glfs_write(fileptr, range2, range2.length, 0);
+		verify(channel, VerificationModeFactory.times(3)).size();
+		verify(channel).guardClosed();
+	}
+
 	@Test(expected = ClosedChannelException.class)
 	public void testRead2Arg_whenClosed() throws IOException {
 		long position = 5L;
@@ -724,12 +780,15 @@ public class GlusterFileChannelTest extends TestCase {
 
 		byte[] bytes = new byte[10];
 		ByteBuffer buffer = ByteBuffer.wrap(bytes);
+		String stringForArr = Arrays.toString(bytes);
 		long position = 2L;
 
 		if (testingPositionSize) {
 			position = 3L;
 			mockStatic(Arrays.class);
 			when(Arrays.copyOf(bytes, bytes.length)).thenReturn(bytes);
+			when(Arrays.copyOfRange(bytes, 0, buffer.remaining())).thenReturn(bytes);
+			when(Arrays.toString(bytes)).thenReturn(stringForArr);
 			mockStatic(ByteBuffer.class);
 			when(ByteBuffer.wrap(bytes)).thenReturn(buffer);
 		}
@@ -757,7 +816,7 @@ public class GlusterFileChannelTest extends TestCase {
 			Arrays.copyOf(bytes, bytes.length);
 		}
 
-		verify(channel, times(testingPositionSize ? 2 : 1)).size();
+		verify(channel, times(testingPositionSize ? 1 : 1)).size();
 		verify(mockOptions).contains(StandardOpenOption.WRITE);
 		verify(channel).guardClosed();
 	}

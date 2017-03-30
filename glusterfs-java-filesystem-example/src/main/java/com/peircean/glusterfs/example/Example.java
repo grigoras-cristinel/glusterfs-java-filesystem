@@ -6,7 +6,6 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
-import java.nio.channels.SeekableByteChannel;
 import java.nio.channels.WritableByteChannel;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.AccessMode;
@@ -185,12 +184,13 @@ public class Example {
 		glusterBigFile.close();
 		Path bigFile2Path = bigFile.getFileSystem().getPath("/targetbig2.txt");
 		Files.deleteIfExists(bigFile2Path);
-		SeekableByteChannel outG = Files.newByteChannel(bigFile2Path, StandardOpenOption.CREATE,
+		FileChannel outG = (FileChannel) Files.newByteChannel(bigFile2Path, StandardOpenOption.CREATE,
 				StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW);
 		glusterBigFile = FileChannel.open(bigFile, StandardOpenOption.READ);
-		glusterBigFile.transferTo(0, glusterBigFile.size(), outG);
+		outG.transferFrom(glusterBigFile, 0, glusterBigFile.size());
 		outG.close();
-		System.out.println("Big file transferFrom end to " + temp.toString() + " size: " + Files.size(temp));
+		System.out.println(
+				"Big file transferFrom end to " + bigFile2Path.toString() + " size: " + Files.size(bigFile2Path));
 		String hello = "Hello, ";
 		Path glusterPath = Paths.get(new URI(testFile));
 		Files.write(glusterPath, hello.getBytes(), StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW);

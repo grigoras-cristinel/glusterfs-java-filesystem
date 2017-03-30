@@ -12,7 +12,6 @@
       <glusterfs.server>172.31.31.31</glusterfs.server>
       <glusterfs.volume>foo</glusterfs.volume>
    </properties>
-
    <build>
       <resources>
          <resource>
@@ -62,13 +61,11 @@
          </plugin>
       </plugins>
    </build>
-
    <dependencies>
       <dependency>
          <groupId>com.peircean.glusterfs</groupId>
          <artifactId>glusterfs-java-filesystem</artifactId>
-         <version>1.0.5</version>
+         <version>1.0.6</version>
       </dependency>
    </dependencies>
-
 </project>

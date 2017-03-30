@@ -6,6 +6,7 @@ import static com.peircean.libgfapi_jni.internal.GLFS.glfs_new;
 import static com.peircean.libgfapi_jni.internal.GLFS.glfs_set_volfile_server;
 import static com.peircean.libgfapi_jni.internal.GLFS.glfs_stat;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
@@ -50,10 +51,9 @@ import com.peircean.libgfapi_jni.internal.UtilJNI;
 import com.peircean.libgfapi_jni.internal.structs.stat;
 import com.peircean.libgfapi_jni.internal.structs.statvfs;
 
-import lombok.AccessLevel;
-import lombok.Getter;
-
 /**
+ * Becouse of problem with runtime dependency, change this to lazy loading
+ *
  * @author <a href="http://about.me/louiszuckerman">Louis Zuckerman</a>
  */
 public class GlusterFileSystemProvider extends FileSystemProvider {
@@ -61,7 +61,6 @@ public class GlusterFileSystemProvider extends FileSystemProvider {
 	public static final String GLUSTER = "gluster";
 	public static final int GLUSTERD_PORT = 24007;
 	public static final String TCP = "tcp";
-	@Getter(AccessLevel.PACKAGE)
 	private static Map<String, GlusterFileSystem> cache = new HashMap<>();
 
 	@Override
@@ -73,16 +72,17 @@ public class GlusterFileSystemProvider extends FileSystemProvider {
 	public FileSystem newFileSystem(URI uri, Map<String, ?> stringMap) throws IOException {
 		String authorityString = uri.getAuthority();
 		String[] authority = parseAuthority(authorityString);
-
 		String volname = authority[1];
 		long volptr = glfsNew(volname);
-
 		glfsSetVolfileServer(authority[0], volptr);
-
 		glfsInit(authorityString, volptr);
-
-		// GLFS.glfs_set_logging(volptr, "/tmp/gluster-java.log", 9);
-
+		if (System.getProperty("glfs-logging") != null) {
+			File tmpFile = File.createTempFile("glfs-", "-logging.log");
+			GLFS.glfs_set_logging(volptr, tmpFile.getPath(), 9);
+			System.out.println("System parameter glfs-logging is set. Logfile is " + tmpFile.getPath());
+		} else {
+			System.out.println("No glfs-logging parameter parameter found.");
+		}
 		GlusterFileSystem fileSystem = new GlusterFileSystem(this, authority[0], volname, volptr);
 		cache.put(authorityString, fileSystem);
 
@@ -591,5 +591,9 @@ public class GlusterFileSystemProvider extends FileSystemProvider {
 		statvfs buf = new statvfs();
 		GLFS.glfs_statvfs(volptr, "/", buf);
 		return buf.f_bsize * buf.f_bfree;
+	}
+
+	public static Map<String, GlusterFileSystem> getCache() {
+		return cache;
 	}
 }

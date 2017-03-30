@@ -16,19 +16,14 @@ import java.util.regex.Pattern;
 
 import com.peircean.glusterfs.borrowed.GlobPattern;
 
-import lombok.NonNull;
-
 /**
  * @author <a href="http://about.me/louiszuckerman">Louis Zuckerman</a>
  */
 
 public class GlusterFileSystem extends FileSystem {
 	private static final String SEPARATOR = "/";
-	@NonNull
 	private final GlusterFileSystemProvider provider;
-	@NonNull
 	private final String host;
-	@NonNull
 	private final String volname;
 
 	public GlusterFileSystem(GlusterFileSystemProvider provider, String host, String volname, long volptr) {
@@ -39,7 +34,6 @@ public class GlusterFileSystem extends FileSystem {
 		this.volptr = volptr;
 	}
 
-	@NonNull
 	private long volptr;
 
 	@Override

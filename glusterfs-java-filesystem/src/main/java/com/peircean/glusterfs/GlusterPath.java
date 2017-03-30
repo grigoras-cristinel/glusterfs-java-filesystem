@@ -21,14 +21,11 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-
 /**
+ * Gluster fs path.
+ *
  * @author <a href="http://about.me/louiszuckerman">Louis Zuckerman</a>
  */
-@Data
-@EqualsAndHashCode(exclude = "pathString")
 public class GlusterPath implements Path {
 	private GlusterFileSystem fileSystem;
 	private String[] parts;
@@ -374,5 +371,65 @@ public class GlusterPath implements Path {
 			return false;
 		}
 
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		GlusterPath other = (GlusterPath) obj;
+		if (absolute != other.absolute)
+			return false;
+		if (fileSystem == null) {
+			if (other.fileSystem != null)
+				return false;
+		} else if (!fileSystem.equals(other.fileSystem))
+			return false;
+		if (!Arrays.equals(parts, other.parts))
+			return false;
+		return true;
+	}
+
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = 1;
+		result = prime * result + (absolute ? 1231 : 1237);
+		result = prime * result + ((fileSystem == null) ? 0 : fileSystem.hashCode());
+		result = prime * result + Arrays.hashCode(parts);
+		return result;
+	}
+
+	@Override
+	public GlusterFileSystem getFileSystem() {
+		return fileSystem;
+	}
+
+	public void setFileSystem(GlusterFileSystem fileSystem) {
+		this.fileSystem = fileSystem;
+	}
+
+	public String[] getParts() {
+		return parts;
+	}
+
+	public void setParts(String[] parts) {
+		this.parts = parts;
+	}
+
+	public String getPathString() {
+		return pathString;
+	}
+
+	public void setPathString(String pathString) {
+		this.pathString = pathString;
+	}
+
+	public void setAbsolute(boolean absolute) {
+		this.absolute = absolute;
 	}
 }

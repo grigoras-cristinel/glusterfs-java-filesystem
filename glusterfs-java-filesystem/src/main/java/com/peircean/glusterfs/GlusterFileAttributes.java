@@ -13,9 +13,6 @@ import java.util.Set;
 
 import com.peircean.libgfapi_jni.internal.structs.stat;
 
-import lombok.Data;
-
-@Data
 public class GlusterFileAttributes implements PosixFileAttributes {
 	private static Map<Integer, PosixFilePermission> modeToPerms = new HashMap<>();
 	private static Map<PosixFilePermission, Integer> permsToMode;
@@ -36,6 +33,19 @@ public class GlusterFileAttributes implements PosixFileAttributes {
 
 	private final int mode, uid, gid;
 	private final long size, atime, ctime, mtime, inode;
+
+	public GlusterFileAttributes(int mode, int uid, int gid, long size, long atime, long ctime, long mtime,
+			long inode) {
+		super();
+		this.mode = mode;
+		this.uid = uid;
+		this.gid = gid;
+		this.size = size;
+		this.atime = atime;
+		this.ctime = ctime;
+		this.mtime = mtime;
+		this.inode = inode;
+	}
 
 	public static GlusterFileAttributes fromStat(stat stat) {
 		return new GlusterFileAttributes(stat.st_mode, stat.st_uid, stat.st_gid, stat.st_size, stat.atime, stat.ctime,
@@ -159,6 +169,54 @@ public class GlusterFileAttributes implements PosixFileAttributes {
 
 	@Override
 	public Object fileKey() {
+		return inode;
+	}
+
+	public static Map<Integer, PosixFilePermission> getModeToPerms() {
+		return modeToPerms;
+	}
+
+	public static void setModeToPerms(Map<Integer, PosixFilePermission> modeToPerms) {
+		GlusterFileAttributes.modeToPerms = modeToPerms;
+	}
+
+	public static Map<PosixFilePermission, Integer> getPermsToMode() {
+		return permsToMode;
+	}
+
+	public static void setPermsToMode(Map<PosixFilePermission, Integer> permsToMode) {
+		GlusterFileAttributes.permsToMode = permsToMode;
+	}
+
+	public int getMode() {
+		return mode;
+	}
+
+	public int getUid() {
+		return uid;
+	}
+
+	public int getGid() {
+		return gid;
+	}
+
+	public long getSize() {
+		return size;
+	}
+
+	public long getAtime() {
+		return atime;
+	}
+
+	public long getCtime() {
+		return ctime;
+	}
+
+	public long getMtime() {
+		return mtime;
+	}
+
+	public long getInode() {
 		return inode;
 	}
 }

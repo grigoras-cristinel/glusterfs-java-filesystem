@@ -47,7 +47,6 @@ import java.util.Map;
 import java.util.Set;
 
 import com.peircean.libgfapi_jni.internal.GLFS;
-import com.peircean.libgfapi_jni.internal.UtilJNI;
 import com.peircean.libgfapi_jni.internal.structs.stat;
 import com.peircean.libgfapi_jni.internal.structs.statvfs;
 
@@ -85,7 +84,6 @@ public class GlusterFileSystemProvider extends FileSystemProvider {
 		}
 		GlusterFileSystem fileSystem = new GlusterFileSystem(this, authority[0], volname, volptr);
 		cache.put(authorityString, fileSystem);
-
 		return fileSystem;
 	}
 
@@ -275,21 +273,15 @@ public class GlusterFileSystemProvider extends FileSystemProvider {
 	}
 
 	void copyFileAttributes(Path path, Path path2) throws IOException {
-		System.out.println("Schimb modul pentru " + path2.toString() + "path 1 is : " + path.toString());
 		stat stat = new stat();
 		long volptr = ((GlusterFileSystem) path.getFileSystem()).getVolptr();
 		int retStat = glfs_stat(volptr, path.toString(), stat);
-
-		System.out.println("stmode in sursa=" + Integer.toOctalString(stat.st_mode) + ", restat=" + retStat
-				+ ", retStat=" + retStat + " " + UtilJNI.strerror());
 		int retChmod = 0;
 		if (path2.getFileSystem() instanceof GlusterFileSystem) {
 			if (0664 != stat.st_mode) {
 				retChmod = GLFS.glfs_chmod(volptr, path2.toString(), stat.st_mode);
 			}
 		}
-		System.out.println("stmode=" + Integer.toOctalString(stat.st_mode) + ", restat=" + retStat + ", retchmod="
-				+ retChmod + " " + UtilJNI.strerror());
 		if (retStat < 0 || retChmod < 0) {
 			throw new IOException("Could not copy file attributes.");
 		}
@@ -571,7 +563,6 @@ public class GlusterFileSystemProvider extends FileSystemProvider {
 
 	int close(long volptr) {
 		int retval = glfs_fini(volptr);
-		System.out.println("Rezultat close opperation:" + retval + "--" + UtilJNI.errno());
 		return retval;
 	}
 

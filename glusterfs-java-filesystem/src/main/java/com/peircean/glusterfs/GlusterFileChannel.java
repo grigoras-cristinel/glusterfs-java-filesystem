@@ -139,8 +139,6 @@ public class GlusterFileChannel extends FileChannel {
 
 		if (0 >= fileptr) {
 			fileptr = GLFS.glfs_open(fileSystem.getVolptr(), pathString, flags);
-			System.out.println(
-					"Cred ca am dat open aici:" + fileSystem.getVolptr() + " flags :" + flags + " paths " + pathString);
 			writable = true;
 		}
 		if (0 >= fileptr) {
@@ -342,7 +340,6 @@ public class GlusterFileChannel extends FileChannel {
 		if ((sz - position) < icount)
 			icount = (int) (sz - position);
 		if (writableByteChannel instanceof GlusterFileChannel) {
-			System.out.println("Scriu in gluster.");
 			return ((GlusterFileChannel) writableByteChannel).transferFromFileChannel(this, position, count);
 		}
 		return transferToArbitraryChannel(position, icount, writableByteChannel);

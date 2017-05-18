@@ -47,11 +47,13 @@ import java.util.Map;
 import java.util.Set;
 
 import com.peircean.libgfapi_jni.internal.GLFS;
+import com.peircean.libgfapi_jni.internal.UtilJNI;
 import com.peircean.libgfapi_jni.internal.structs.stat;
 import com.peircean.libgfapi_jni.internal.structs.statvfs;
 
 /**
- * Becouse of problem with runtime dependency, change this to lazy loading
+ * TODO Because of problem with runtime dependency, need to change this to lazy
+ * loading
  *
  * @author <a href="http://about.me/louiszuckerman">Louis Zuckerman</a>
  */
@@ -72,6 +74,60 @@ public class GlusterFileSystemProvider extends FileSystemProvider {
 		String authorityString = uri.getAuthority();
 		String[] authority = parseAuthority(authorityString);
 		String volname = authority[1];
+		if (stringMap != null && stringMap.containsKey("gid")) {
+			Object ap = stringMap.get("gid");
+			if (ap != null && ap instanceof Integer) {
+				int rez = GLFS.glfs_setfsgid(((Integer) ap).intValue());
+				if (rez == 0) {
+					System.out.println("Gid set from map gid is you are root");
+				} else {
+					System.out.println("Gid set has error " + UtilJNI.strerror());
+				}
+			}
+		} else if (System.getProperty("glfs-gid") != null) {
+			String propertyGid = System.getProperty("glfs-gid");
+			System.out.println("System parameter glfs-gid is set. Gid is " + propertyGid);
+			try {
+				long guidInt = Long.parseLong(propertyGid);
+				int rez = GLFS.glfs_setfsgid(guidInt);
+				if (rez == 0) {
+					System.out.println("Gid set to " + guidInt + " if you are root");
+				} else {
+					System.out.println("Gid set has error " + UtilJNI.strerror());
+				}
+			} catch (Exception e) {
+				System.out.println("Property glfs-gid incorect.Integer expected.");
+			}
+		} else {
+			System.out.println("No glfs-gid property found to use.");
+		}
+		if (stringMap != null && stringMap.containsKey("uid")) {
+			Object ap = stringMap.get("uid");
+			if (ap != null && ap instanceof Integer) {
+				long uidLong = ((Integer) ap).longValue();
+				int rez = GLFS.glfs_setfsuid(uidLong);
+				if (rez == 0) {
+					System.out.println("Uid set to " + uidLong + " if you are root");
+				}
+			}
+		} else if (System.getProperty("glfs-uid") != null) {
+			String propertyUid = System.getProperty("glfs-uid");
+			System.out.println("System parameter glfs-uid is set. Uid is " + propertyUid);
+			try {
+				int guidInt = Integer.parseInt(propertyUid);
+				int rez = GLFS.glfs_setfsuid(guidInt);
+				if (rez == 0) {
+					System.out.println("Uid set to " + guidInt + " if you are root");
+				} else {
+					System.out.println("Uid set has error " + UtilJNI.strerror());
+				}
+
+			} catch (Exception e) {
+				System.out.println("Property glfs-uid incorect.Integer expected.");
+			}
+		} else {
+			System.out.println("No glfs-uid property found.");
+		}
 		long volptr = glfsNew(volname);
 		glfsSetVolfileServer(authority[0], volptr);
 		glfsInit(authorityString, volptr);
@@ -80,7 +136,7 @@ public class GlusterFileSystemProvider extends FileSystemProvider {
 			GLFS.glfs_set_logging(volptr, tmpFile.getPath(), 9);
 			System.out.println("System parameter glfs-logging is set. Logfile is " + tmpFile.getPath());
 		} else {
-			System.out.println("No glfs-logging parameter parameter found.");
+			System.out.println("No glfs-logging property found.");
 		}
 		GlusterFileSystem fileSystem = new GlusterFileSystem(this, authority[0], volname, volptr);
 		cache.put(authorityString, fileSystem);
@@ -126,6 +182,13 @@ public class GlusterFileSystemProvider extends FileSystemProvider {
 		if (!cache.containsKey(uri.getAuthority())) {
 			throw new FileSystemNotFoundException("No cached filesystem for: " + uri.getAuthority());
 		}
+		if (cache.containsKey(uri.getAuthority())) {
+			GlusterFileSystem existent = cache.get(uri.getAuthority());
+			if (!existent.isOpen()) {
+				cache.remove(uri.getAuthority());
+				throw new FileSystemNotFoundException("No cached filesystem for: " + uri.getAuthority());
+			}
+		}
 		return cache.get(uri.getAuthority());
 	}
 
@@ -134,6 +197,7 @@ public class GlusterFileSystemProvider extends FileSystemProvider {
 		if (!uri.getScheme().equals(getScheme())) {
 			throw new IllegalArgumentException("No support for scheme: " + uri.getScheme());
 		}
+
 		try {
 			FileSystem fileSystem = getFileSystem(uri);
 			return fileSystem.getPath(uri.getPath());
@@ -486,7 +550,6 @@ public class GlusterFileSystemProvider extends FileSystemProvider {
 					type + " attribute type is not supported, only PosixFileAttributes & its superinterfaces");
 		}
 		stat stat = new stat();
-
 		boolean followSymlinks = true;
 		for (LinkOption lo : linkOptions) {
 			if (lo.equals(LinkOption.NOFOLLOW_LINKS)) {
@@ -501,11 +564,9 @@ public class GlusterFileSystemProvider extends FileSystemProvider {
 		} else {
 			ret = GLFS.glfs_lstat(((GlusterFileSystem) path.getFileSystem()).getVolptr(), pathString, stat);
 		}
-
 		if (-1 == ret) {
 			throw new NoSuchFileException("");
 		}
-
 		return (A) GlusterFileAttributes.fromStat(stat);
 	}
 
@@ -540,7 +601,6 @@ public class GlusterFileSystemProvider extends FileSystemProvider {
 		if (-1 == readReturn) {
 			throw new IOException("Unable to read symlink " + pathString);
 		}
-
 		return new GlusterPath(fileSystem, new String(content));
 	}
 

@@ -91,7 +91,9 @@ public class Example {
 		serverUri = "gluster://" + server + ":" + volname + "/";
 		fileSystem = FileSystems.newFileSystem(new URI(serverUri), null);
 		fileSystemProvider = fileSystem.provider();
-
+		if (Files.isDirectory(fileSystem.getPath("/"))) {
+			System.out.println("Este director.");
+		}
 		if (logger.isLoggable(Level.CONFIG)) {
 			logger.logp(Level.CONFIG, "Example", "createFileSystem()", "end"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 		}

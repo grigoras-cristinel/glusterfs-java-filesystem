@@ -624,7 +624,10 @@ public class GlusterFileSystemProvider extends FileSystemProvider {
 	}
 
 	int close(final GlusterFileSystem fileSystem) {
-		int retval = glfs_fini(fileSystem.getVolptr());
+		int retval = 0;
+		if (fileSystem.isOpen()) {
+			retval = glfs_fini(fileSystem.getVolptr());
+		}
 		if (cache.containsValue(fileSystem)) {
 			cache.entrySet().removeIf(new Predicate<Map.Entry<String, GlusterFileSystem>>() {
 
@@ -639,8 +642,11 @@ public class GlusterFileSystemProvider extends FileSystemProvider {
 	}
 
 	int close(long volPtr) {
-		int retval = glfs_fini(volPtr);
-		return retval;
+		if (volPtr > 0) {
+			int retval = glfs_fini(volPtr);
+			return retval;
+		}
+		return 0;
 	}
 
 	long getTotalSpace(long volptr) throws IOException {

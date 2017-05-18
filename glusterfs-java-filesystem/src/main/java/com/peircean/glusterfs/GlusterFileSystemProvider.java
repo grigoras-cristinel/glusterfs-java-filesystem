@@ -44,7 +44,9 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
+import java.util.function.Predicate;
 
 import com.peircean.libgfapi_jni.internal.GLFS;
 import com.peircean.libgfapi_jni.internal.UtilJNI;
@@ -621,8 +623,23 @@ public class GlusterFileSystemProvider extends FileSystemProvider {
 		}
 	}
 
-	int close(long volptr) {
-		int retval = glfs_fini(volptr);
+	int close(final GlusterFileSystem fileSystem) {
+		int retval = glfs_fini(fileSystem.getVolptr());
+		if (cache.containsValue(fileSystem)) {
+			cache.entrySet().removeIf(new Predicate<Map.Entry<String, GlusterFileSystem>>() {
+
+				@Override
+				public boolean test(Entry<String, GlusterFileSystem> t) {
+					return t.getValue().equals(fileSystem);
+				}
+
+			});
+		}
+		return retval;
+	}
+
+	int close(long volPtr) {
+		int retval = glfs_fini(volPtr);
 		return retval;
 	}
 
